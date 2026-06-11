@@ -6,15 +6,16 @@ chosen polynomial and colors the pixel by **which root the iteration converges t
 (its *basin of attraction*). Shading by the number of iterations reveals the
 infinitely detailed boundary between basins.
 
-The math: by the Fundamental Theorem of Algebra a degree-`n` polynomial has `n`
-roots in `ℂ`, and Newton's iteration
+The math: by the Fundamental Theorem of Algebra a degree-$n$ polynomial has exactly
+$n$ roots in $\mathbb{C}$. Newton's iteration generalizes to the complex plane
+unchanged:
 
-```
-z_{k+1} = z_k − p(z_k) / p'(z_k)
-```
+$$z_{k+1} = z_k - \frac{p(z_k)}{p'(z_k)}$$
 
-extends to the complex plane unchanged. Each pixel is one starting value; its final
-landing point is matched to the nearest root.
+Each pixel is one starting point $z_1 = a + bi$; after at most $M$ steps the orbit
+is matched to the nearest root $r_j$, which determines the pixel's color. The
+fractal boundary arises because points near the basin edges converge slowly — or
+not at all.
 
 ## Requirements
 
