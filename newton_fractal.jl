@@ -9,18 +9,66 @@
 #     julia> include("newton_fractal.jl")
 #
 #  Window features:
+#    • UI language switch (Português / English) at the top
 #    • polynomial by ROOTS or COEFFICIENTS — presets OR typed directly
-#      in the text fields (comma-separated, imaginary unit `im`, Enter)
-#    • color palettes + shading by iteration count (the fractal "glow")
-#    • zoom: scroll/drag the axis, then click "Renderizar região"
-#      to RE-COMPUTE the fractal in that window (true deep zoom)
+#      (comma-separated, imaginary unit `im`, press Enter)
+#    • roots drawn as white dots on top of their basins
+#    • live slider readouts, palettes, iteration shading
+#    • zoom: scroll/drag the axis, then "Renderizar região" RE-COMPUTES
+#      the fractal in that window (true deep zoom)
 # ======================================================================
 
 using GLMakie, Polynomials
 
+GLMakie.activate!(title = "Newton fractal")
+
+# ----------------------------------------------------------------------
+# i18n — every UI string in both languages
+# ----------------------------------------------------------------------
+const STR = Dict(
+    :pt => Dict(
+        :controls => "Controles",
+        :poly     => "Polinômio",
+        :pal      => "Paleta",
+        :iter     => "Máx. iterações (M)",
+        :res      => "Resolução",
+        :shade    => "sombrear (brilho)",
+        :render   => "Renderizar região (zoom)",
+        :reset    => "Reset zoom",
+        :roots_in => "Raízes (Enter aplica):",
+        :coefs_in => "Coefs a₀,…,aₙ (Enter):",
+        :title    => "Fractal de Newton",
+        :degree   => "grau",
+        :roots    => "raízes",
+        :custom   => "personalizado",
+        :needdeg  => "preciso de grau ≥ 1",
+        :err_r    => "raízes: formato 1, -0.5+0.87im, … (use im)",
+        :err_c    => "coefs: formato a₀, a₁, … (use im)",
+    ),
+    :en => Dict(
+        :controls => "Controls",
+        :poly     => "Polynomial",
+        :pal      => "Palette",
+        :iter     => "Max iterations (M)",
+        :res      => "Resolution",
+        :shade    => "shading (glow)",
+        :render   => "Render region (zoom)",
+        :reset    => "Reset zoom",
+        :roots_in => "Roots (Enter applies):",
+        :coefs_in => "Coeffs a₀,…,aₙ (Enter):",
+        :title    => "Newton fractal",
+        :degree   => "degree",
+        :roots    => "roots",
+        :custom   => "custom",
+        :needdeg  => "need degree ≥ 1",
+        :err_r    => "roots: format 1, -0.5+0.87im, … (use im)",
+        :err_c    => "coeffs: format a₀, a₁, … (use im)",
+    ),
+)
+const LANGS = ["Português" => :pt, "English" => :en]
+
 # ----------------------------------------------------------------------
 # 1) Numerical core: iterate Newton over a grid of the complex plane.
-#    Returns the basin (root index) and speed (iters/M) per pixel.
 # ----------------------------------------------------------------------
 function newton_basins(P::Polynomial, dP::Polynomial, rs::Vector{<:Complex};
                        xlims, ylims, res::Int, maxiter::Int, tol::Float64)
@@ -60,9 +108,7 @@ end
 
 # ----------------------------------------------------------------------
 # 2) basins + speed  ->  RGB image
-#    base color per root (sampled from palette) x glow(k) = (1 - k/M)^gamma
-#    NOTE: we read the .r/.g/.b fields directly — Makie does NOT export
-#    the Colors accessors red()/green()/blue(), so calling them errors.
+#    (.r/.g/.b field access — Makie does not export red()/green()/blue())
 # ----------------------------------------------------------------------
 function basins_to_image(basin, speed, n::Int, palette::Symbol; shade::Bool, γ = 0.45)
     grad = cgrad(palette)
@@ -98,7 +144,7 @@ const PRESETS = [
     "z⁴ − 1"                 => (:roots,  [cis(2π*k/4) for k in 0:3]),
     "z⁵ − 1"                 => (:roots,  [cis(2π*k/5) for k in 0:4]),
     "z⁶ − 1"                 => (:roots,  [cis(2π*k/6) for k in 0:5]),
-    "z³ − 2z + 2 (chaotic)"  => (:coeffs, [2.0, -2.0, 0.0, 1.0]),
+    "z³ − 2z + 2"            => (:coeffs, [2.0, -2.0, 0.0, 1.0]),
     "z⁶ + z³ − 1"            => (:coeffs, [-1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0]),
     "z⁸ + 15z⁴ − 16"         => (:coeffs, [-16.0, 0,0,0, 15.0, 0,0,0, 1.0]),
 ]
@@ -109,38 +155,69 @@ const LOOKUP   = Dict(PRESETS)
 # 5) Interactive app  (returns the Figure; does NOT display it)
 # ----------------------------------------------------------------------
 function launch()
-    fig = Figure(size = (1200, 840))
-    ax  = Axis(fig[1, 2]; aspect = DataAspect(),
-               title = "Fractal de Newton", xlabel = "Re", ylabel = "Im")
+    lang = Ref(:pt)
+    t(k) = STR[lang[]][k]
+
+    fig = Figure(size = (1240, 860))
+    ax  = Axis(fig[1, 2]; aspect = DataAspect(), xlabel = "Re", ylabel = "Im")
 
     ctrl = fig[1, 1] = GridLayout(tellheight = false, valign = :top)
-    Label(ctrl[1, 1:2], "Controles"; font = :bold, fontsize = 18)
-    Label(ctrl[2, 1:2], "Polinômio");          menu_preset = Menu(ctrl[3, 1:2]; options = first.(PRESETS))
-    Label(ctrl[4, 1:2], "Paleta");             menu_pal    = Menu(ctrl[5, 1:2]; options = string.(PALETTES))
-    Label(ctrl[6, 1:2], "Máx. iterações (M)"); sl_iter     = Slider(ctrl[7, 1:2]; range = 20:10:300, startvalue = 70)
-    Label(ctrl[8, 1:2], "Resolução");          sl_res      = Slider(ctrl[9, 1:2]; range = 200:100:1400, startvalue = 600)
-    tg_shade = Toggle(ctrl[10, 1]; active = true); Label(ctrl[10, 2], "sombrear (brilho)")
-    btn_render = Button(ctrl[11, 1:2]; label = "Renderizar região (zoom)")
-    btn_reset  = Button(ctrl[12, 1:2]; label = "Reset zoom")
-    info       = Label(ctrl[13, 1:2], "—"; tellwidth = false)
-    Label(ctrl[14, 1:2], "Raízes (Enter aplica):")
-    tb_roots  = Textbox(ctrl[15, 1:2]; placeholder = "1, -0.5+0.87im, -0.5-0.87im", width = 230)
-    Label(ctrl[16, 1:2], "Coefs a₀,…,aₙ (Enter):")
-    tb_coeffs = Textbox(ctrl[17, 1:2]; placeholder = "-1, 0, 0, 1", width = 230)
+    colsize!(fig.layout, 1, Fixed(300))      # fixed panel width: nothing overflows
 
-    state   = Ref{Any}(nothing)                 # (P, dP, rs)
-    DEFAULT = ((-2.0, 2.0), (-2.0, 2.0))
-    cur     = Ref(DEFAULT)
+    lbl_head   = Label(ctrl[1, 1:2], ""; font = :bold, fontsize = 18, halign = :left)
+    menu_lang  = Menu(ctrl[2, 1:2]; options = first.(LANGS))
+    lbl_poly   = Label(ctrl[3, 1:2], ""; halign = :left)
+    menu_preset = Menu(ctrl[4, 1:2]; options = first.(PRESETS))
+    lbl_pal    = Label(ctrl[5, 1:2], ""; halign = :left)
+    menu_pal   = Menu(ctrl[6, 1:2]; options = string.(PALETTES))
+    lbl_iter   = Label(ctrl[7, 1], ""; halign = :left)
+    sl_iter    = Slider(ctrl[8, 1:2]; range = 20:10:300, startvalue = 70)
+    Label(ctrl[7, 2], lift(string, sl_iter.value); halign = :right)   # live readout
+    lbl_res    = Label(ctrl[9, 1], ""; halign = :left)
+    sl_res     = Slider(ctrl[10, 1:2]; range = 200:100:1400, startvalue = 600)
+    Label(ctrl[9, 2], lift(string, sl_res.value); halign = :right)    # live readout
+    tg_shade   = Toggle(ctrl[11, 1]; active = true, halign = :left)
+    lbl_shade  = Label(ctrl[11, 2], ""; halign = :left)
+    btn_render = Button(ctrl[12, 1:2]; label = " ")
+    btn_reset  = Button(ctrl[13, 1:2]; label = " ")
+    info       = Label(ctrl[14, 1:2], "—"; halign = :left, tellwidth = false)
+    lbl_roots  = Label(ctrl[15, 1:2], ""; halign = :left)
+    tb_roots   = Textbox(ctrl[16, 1:2]; placeholder = "1, 2im, -1-1im", width = 280)
+    lbl_coefs  = Label(ctrl[17, 1:2], ""; halign = :left)
+    tb_coeffs  = Textbox(ctrl[18, 1:2]; placeholder = "-1, 0, 0, 1", width = 280)
+    rowgap!(ctrl, 10)
+
+    state    = Ref{Any}(nothing)                # (P, dP, rs)
+    DEFAULT  = ((-2.0, 2.0), (-2.0, 2.0))
+    cur      = Ref(DEFAULT)
+    polyname = Ref(first(PRESETS)[1])
+    inforef  = Ref((deg = 0, n = 0, custom = false))
+
+    function refresh_text!()                    # re-applies every string in lang[]
+        lbl_head.text  = t(:controls)
+        lbl_poly.text  = t(:poly)
+        lbl_pal.text   = t(:pal)
+        lbl_iter.text  = t(:iter)
+        lbl_res.text   = t(:res)
+        lbl_shade.text = t(:shade)
+        btn_render.label = t(:render)
+        btn_reset.label  = t(:reset)
+        lbl_roots.text = t(:roots_in)
+        lbl_coefs.text = t(:coefs_in)
+        s = inforef[]
+        ax.title  = t(:title) * " — " * (s.custom ? t(:custom) : polyname[])
+        info.text = s.deg == 0 ? "—" :
+            "$(t(:degree)) $(s.deg) · $(s.n) $(t(:roots))" * (s.custom ? " · $(t(:custom))" : "")
+    end
 
     function set_poly!(name)
         kind, data = LOOKUP[name]
-        if kind === :roots
-            P, rs = poly_from_roots(data), ComplexF64.(data)
-        else
-            P, rs = poly_from_coeffs(data)
-        end
-        state[] = (P, derivative(P), rs)
-        info.text = "grau $(degree(P)) · $(length(rs)) raízes"
+        P, rs = kind === :roots ? (poly_from_roots(data), ComplexF64.(data)) :
+                                  poly_from_coeffs(data)
+        state[]    = (P, derivative(P), rs)
+        polyname[] = name
+        inforef[]  = (deg = degree(P), n = length(rs), custom = false)
+        refresh_text!()
     end
 
     function render!(xlims, ylims)
@@ -153,40 +230,48 @@ function launch()
             Symbol(menu_pal.selection[]); shade = tg_shade.active[])
         empty!(ax)
         image!(ax, xlims[1] .. xlims[2], ylims[1] .. ylims[2], img)
+        scatter!(ax, real.(rs), imag.(rs); color = :white,        # the stars of the show
+                 strokecolor = :black, strokewidth = 1.5, markersize = 11)
         limits!(ax, xlims[1], xlims[2], ylims[1], ylims[2])
         cur[] = (xlims, ylims)
     end
 
     # custom polynomial from the text fields ----------------------------
-    function set_custom!(P, rs, tag)
+    function set_custom!(P, rs)
         if degree(P) < 1 || isempty(rs)
-            info.text = "preciso de grau ≥ 1"
+            info.text = t(:needdeg)
             return
         end
-        state[] = (P, derivative(P), rs)
-        info.text = "grau $(degree(P)) · $(length(rs)) raízes · $tag"
+        state[]   = (P, derivative(P), rs)
+        inforef[] = (deg = degree(P), n = length(rs), custom = true)
+        refresh_text!()
         render!(DEFAULT...)
     end
     on(tb_roots.stored_string) do s
         s === nothing && return
         try
             rs = parse_clist(s)
-            set_custom!(poly_from_roots(rs), ComplexF64.(rs), "raízes")
+            set_custom!(poly_from_roots(rs), ComplexF64.(rs))
         catch
-            info.text = "raízes: formato 1, -0.5+0.87im, … (use im)"
+            info.text = t(:err_r)
         end
     end
     on(tb_coeffs.stored_string) do s
         s === nothing && return
         try
             P, rs = poly_from_coeffs(parse_clist(s))
-            set_custom!(P, rs, "coefs")
+            set_custom!(P, rs)
         catch
-            info.text = "coefs: formato a₀, a₁, … (use im)"
+            info.text = t(:err_c)
         end
     end
 
     # other events -------------------------------------------------------
+    on(menu_lang.selection) do sel
+        sel === nothing && return
+        lang[] = Dict(LANGS)[sel]
+        refresh_text!()
+    end
     on(menu_preset.selection) do name
         name === nothing && return
         set_poly!(name); render!(DEFAULT...)
@@ -215,8 +300,3 @@ end
 let screen = display(launch())
     isinteractive() || wait(screen)
 end
-
-# ----------------------------------------------------------------------
-# NOTE — scroll-zoom that recomputes automatically: call render!(cur[]...)
-# inside  on(events(ax.scene).scroll)  with the axis' current limits.
-# ----------------------------------------------------------------------

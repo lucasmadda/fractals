@@ -47,6 +47,7 @@ after that opens in seconds.
 
 | Control | What it does |
 |---|---|
+| **Idioma / Language** | Switches every UI label between Portuguese and English, live |
 | **Polinômio** | Pick a preset, defined either by its roots or its coefficients |
 | **Paleta** | Color map for the basins |
 | **Máx. iterações (M)** | Iteration cap per pixel (higher = sharper boundaries, slower) |
