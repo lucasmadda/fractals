@@ -6,7 +6,7 @@ chosen polynomial and colors the pixel by **which root the iteration converges t
 (its *basin of attraction*). Shading by the number of iterations reveals the
 infinitely detailed boundary between basins.
 
-The math: by the Fundamental Theorem of Algebra a degree-$n$ polynomial has exactly
+The math: by the Fundamental Theorem of Algebra, every degree $n$ polynomial has exactly
 $n$ roots in $\mathbb{C}$. Newton's iteration generalizes to the complex plane
 unchanged:
 
